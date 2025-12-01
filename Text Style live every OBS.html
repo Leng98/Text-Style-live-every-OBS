@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khmer Stream Studio</title>
+    
+    <!-- React & Tailwind Setup -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Battambang:wght@400;700&family=Dangrek&family=Kantumruy+Pro:wght@400;700&family=Moul&display=swap" rel="stylesheet">
+
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Kantumruy Pro', sans-serif; }
+        
+        /* Custom Animations */
+        @keyframes wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes pulse-slow { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+        @keyframes bounce-slow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+        @keyframes shake { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(1deg); } 75% { transform: rotate(-1deg); } }
+        
+        .animate-wave { animation: wave var(--anim-duration, 3s) ease-in-out infinite; }
+        .animate-pulse-slow { animation: pulse-slow var(--anim-duration, 3s) ease-in-out infinite; }
+        .animate-bounce-slow { animation: bounce-slow var(--anim-duration, 3s) ease-in-out infinite; }
+        .animate-shake { animation: shake var(--anim-duration, 3s) ease-in-out infinite; }
+        
+        .animate-shine { position: relative; overflow: hidden; }
+        .animate-shine::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transform: skewX(-20deg) translateX(-150%);
+            animation: shine-sweep var(--anim-duration, 3s) infinite;
+        }
+        @keyframes shine-sweep { 0% { transform: skewX(-20deg) translateX(-150%); } 100% { transform: skewX(-20deg) translateX(250%); } }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        /* Color Input Reset */
+        input[type="color"] {
+            -webkit-appearance: none; border: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; cursor: pointer; padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        // --- ICONS ---
+        const Icon = ({ path, size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
+        );
+
+        const icons = {
+            play: <polygon points="5 3 19 12 5 21 5 3"></polygon>,
+            pause: <g><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></g>,
+            upload: <g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></g>,
+            type: <g><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></g>,
+            monitor: <g><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></g>,
+            volume2: <g><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></g>,
+            volumeX: <g><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></g>,
+            palette: <g><circle cx="13.5" cy="6.5" r=".5"></circle><circle cx="17.5" cy="10.5" r=".5"></circle><circle cx="8.5" cy="7.5" r=".5"></circle><circle cx="6.5" cy="12.5" r=".5"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.55 0 1-.45 1-1 0-2 2-2 2-2v-2c0-1.1.9-2 2-2 1 0 2 1 2 2v1c0 2.6-1.9 5-4.5 5A10 10 0 0 1 12 2Z"></path></g>,
+            move: <g><polyline points="5 9 2 12 5 15"></polyline><polyline points="9 5 12 2 15 5"></polyline><polyline points="15 19 12 22 9 19"></polyline><polyline points="19 9 22 12 19 15"></polyline><line x1="2" y1="12" x2="22" y2="12"></line><line x1="12" y1="2" x2="12" y2="22"></line></g>,
+            refresh: <g><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path><path d="M21 22v-6h-6"></path><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path></g>,
+            activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>,
+            zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>,
+            layers: <g><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></g>,
+            eye: <g><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></g>,
+            eyeOff: <g><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></g>,
+            sliders: <g><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></g>,
+            edit: <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>,
+            edit2: <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        };
+
+        const App = () => {
+            const [videoSrc, setVideoSrc] = useState(null);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [isMuted, setIsMuted] = useState(false);
+            const videoRef = useRef(null);
+
+            const [textContent, setTextContent] = useState("ស្វាគមន៍ការមកកាន់ការផ្សាយផ្ទាល់!\nប្រធានបទថ្ងៃនេះគឺពិសេសណាស់\nកុំភ្លេចជួយ Share ម្នាក់មួយផងបាទ");
+            
+            // Style State
+            const [themeColor, setThemeColor] = useState("neon"); // 'multi', 'neon', 'gold', 'blue', 'red', 'custom'
+            const [fontFamily, setFontFamily] = useState("Kantumruy Pro");
+            const [showControls, setShowControls] = useState(true);
+            const [showConnector, setShowConnector] = useState(true);
+            const [backgroundMode, setBackgroundMode] = useState("video");
+            
+            // New Customization State
+            const [gapSize, setGapSize] = useState(20);
+            const [customColors, setCustomColors] = useState({
+                start: '#ec4899', // Pink
+                end: '#8b5cf6',   // Purple
+                border: '#f472b6', // Light Pink
+                dot: '#ec4899'
+            });
+
+            // Animation
+            const [animationType, setAnimationType] = useState("wave");
+            const [animationDuration, setAnimationDuration] = useState(3);
+            
+            // Transform
+            const [scale, setScale] = useState(1);
+            const [position, setPosition] = useState({ x: 50, y: 50 });
+            const [isDragging, setIsDragging] = useState(false);
+            const dragStart = useRef({ x: 0, y: 0 });
+
+            // Handlers
+            const handleMouseDown = (e) => {
+                if(e.button !== 0) return;
+                setIsDragging(true);
+                dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+            };
+
+            const handleMouseMove = (e) => {
+                if (isDragging) {
+                    setPosition({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y });
+                }
+            };
+            const handleMouseUp = () => setIsDragging(false);
+
+            // Presets
+            const colorPalettes = {
+                multi: [
+                    { bg: "bg-gradient-to-r from-cyan-500 to-blue-600", border: "border-cyan-300", dot: "bg-cyan-400" },
+                    { bg: "bg-gradient-to-r from-emerald-500 to-green-600", border: "border-emerald-300", dot: "bg-emerald-400" },
+                    { bg: "bg-gradient-to-r from-amber-500 to-orange-600", border: "border-amber-300", dot: "bg-amber-400" },
+                    { bg: "bg-gradient-to-r from-purple-500 to-pink-600", border: "border-pink-300", dot: "bg-pink-400" },
+                ],
+                neon: [
+                    { bg: "bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600", border: "border-pink-400", dot: "bg-pink-500" },
+                    { bg: "bg-gradient-to-r from-yellow-500 via-orange-600 to-red-600", border: "border-yellow-400", dot: "bg-yellow-500" },
+                    { bg: "bg-gradient-to-r from-green-500 via-teal-600 to-blue-600", border: "border-green-400", dot: "bg-green-500" },
+                ],
+                gold: [
+                    { bg: "bg-gradient-to-r from-yellow-600 to-yellow-800", border: "border-yellow-400", dot: "bg-yellow-500" },
+                    { bg: "bg-gradient-to-r from-amber-700 to-orange-900", border: "border-orange-400", dot: "bg-amber-600" },
+                ],
+                blue: [{ bg: "bg-gradient-to-r from-blue-600 to-blue-900", border: "border-blue-400", dot: "bg-blue-500" }],
+                red:  [{ bg: "bg-gradient-to-r from-red-600 to-red-900", border: "border-red-400", dot: "bg-red-500" }]
+            };
+
+            const getStyle = (index) => {
+                if (themeColor === 'custom') return null; // Handled inline
+                const palette = colorPalettes[themeColor] || colorPalettes.multi;
+                return palette[index % palette.length];
+            };
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const url = URL.createObjectURL(file);
+                    setVideoSrc(url);
+                    setBackgroundMode('video');
+                }
+            };
+
+            const togglePlay = () => { if (videoRef.current) { if (isPlaying) videoRef.current.pause(); else videoRef.current.play(); setIsPlaying(!isPlaying); } };
+            const toggleMute = () => { if (videoRef.current) { videoRef.current.muted = !isMuted; setIsMuted(!isMuted); } };
+
+            const lines = textContent.split('\n').filter(line => line.trim() !== "");
+
+            const getAnimationClass = () => {
+                switch(animationType) {
+                    case 'wave': return 'animate-wave';
+                    case 'pulse': return 'animate-pulse-slow';
+                    case 'bounce': return 'animate-bounce-slow';
+                    case 'shine': return 'animate-shine';
+                    case 'shake': return 'animate-shake';
+                    default: return '';
+                }
+            };
+
+            const updateCustomColor = (key, value) => {
+                setCustomColors(prev => ({ ...prev, [key]: value }));
+            };
+
+            return (
+                <div 
+                    className={`flex h-screen overflow-hidden text-white font-['Kantumruy_Pro'] ${backgroundMode === 'transparent' ? 'bg-transparent' : 'bg-gray-900'}`}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    style={{ '--anim-duration': `${animationDuration}s` }}
+                >
+                    {/* SIDEBAR */}
+                    {showControls && (
+                        <div className="w-80 bg-gray-800 border-r border-gray-700 flex flex-col h-full shadow-xl z-50 shrink-0 overflow-y-auto">
+                            <div className="p-4 border-b border-gray-700 bg-gray-800 sticky top-0 z-10">
+                                <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 flex items-center gap-2 font-['Dangrek']">
+                                    <Icon path={icons.monitor} className="text-red-500" /> JELY STUDIO TEXT
+                                </h1>
+                            </div>
+
+                            <div className="p-4 space-y-6">
+                                {/* Background Mode */}
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-400 flex items-center gap-2 uppercase">
+                                        <Icon path={icons.layers} size={14} /> ផ្ទៃខាងក្រោយ
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button onClick={() => setBackgroundMode('video')} className={`p-2 rounded text-xs flex items-center justify-center gap-2 ${backgroundMode === 'video' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}><Icon path={icons.play} size={12} /> Video</button>
+                                        <button onClick={() => setBackgroundMode('transparent')} className={`p-2 rounded text-xs flex items-center justify-center gap-2 ${backgroundMode === 'transparent' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}><Icon path={icons.eyeOff} size={12} /> Transparent</button>
+                                    </div>
+                                    {backgroundMode === 'video' && (
+                                        <input type="file" accept="video/*" onChange={handleFileUpload} className="block w-full text-xs text-gray-400 file:mr-2 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-700 file:text-white cursor-pointer mt-2"/>
+                                    )}
+                                </div>
+                                <hr className="border-gray-700" />
+                                
+                                {/* Text Input */}
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-400 flex items-center gap-2 uppercase">
+                                        <Icon path={icons.type} size={14} /> ខ្លឹមសារ
+                                    </label>
+                                    <textarea value={textContent} onChange={(e) => setTextContent(e.target.value)} className="w-full bg-gray-900/50 border border-gray-600 rounded-lg p-3 text-white focus:ring-1 focus:ring-blue-500 outline-none h-64 resize-none text-sm" />
+                                </div>
+                                <hr className="border-gray-700" />
+
+                                {/* Animations */}
+                                <div className="space-y-4">
+                                    <label className="text-xs font-bold text-gray-400 flex items-center gap-2 uppercase text-yellow-500">
+                                        <Icon path={icons.activity} size={14} /> ចលនា (Animations)
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['none', 'wave', 'pulse', 'bounce', 'shine', 'shake'].map(anim => (
+                                            <button key={anim} onClick={() => setAnimationType(anim)} className={`text-xs p-2 rounded border capitalize ${animationType === anim ? 'bg-yellow-600 border-yellow-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-300'}`}>{anim}</button>
+                                        ))}
+                                    </div>
+                                    {animationType !== 'none' && (
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between text-xs text-gray-400"><span>ល្បឿន</span><span>{animationDuration}s</span></div>
+                                            <input type="range" min="0.5" max="10.0" step="0.5" value={animationDuration} onChange={(e) => setAnimationDuration(parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-yellow-500" />
+                                        </div>
+                                    )}
+                                </div>
+                                <hr className="border-gray-700" />
+
+                                {/* Styles */}
+                                <div className="space-y-4">
+                                    <label className="text-xs font-bold text-gray-400 flex items-center gap-2 uppercase"><Icon path={icons.palette} size={14} /> រចនាប័ទ្ម</label>
+                                    
+                                    {/* Presets Grid */}
+                                    <div className="grid grid-cols-6 gap-2">
+                                        {[
+                                            { id: 'multi', color: 'bg-gradient-to-br from-cyan-400 to-blue-600' },
+                                            { id: 'neon', color: 'bg-gradient-to-br from-pink-500 to-purple-600' },
+                                            { id: 'gold', color: 'bg-gradient-to-br from-yellow-500 to-amber-700' },
+                                            { id: 'blue', color: 'bg-blue-600' },
+                                            { id: 'red', color: 'bg-red-600' },
+                                            { id: 'custom', icon: icons.edit2, color: 'bg-gray-600' }
+                                        ].map((theme) => (
+                                            <button 
+                                                key={theme.id} 
+                                                onClick={() => setThemeColor(theme.id)} 
+                                                className={`h-8 rounded-md transition-all border-2 flex items-center justify-center ${themeColor === theme.id ? 'border-white scale-110' : 'border-transparent opacity-60 hover:opacity-100'} ${theme.color}`}
+                                                title={theme.id}
+                                            >
+                                                {theme.icon && <Icon path={theme.icon} size={14} className="text-white" />}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Custom Color Editor */}
+                                    {themeColor === 'custom' && (
+                                        <div className="bg-gray-700/50 p-3 rounded-lg border border-gray-600 space-y-2 animate-pulse-once">
+                                            <p className="text-[10px] text-gray-400 uppercase font-bold mb-2">កំណត់ពណ៌ដោយខ្លួនឯង:</p>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs">ខាងដើម (Start)</span>
+                                                <input type="color" value={customColors.start} onChange={(e) => updateCustomColor('start', e.target.value)} />
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs">ខាងចុង (End)</span>
+                                                <input type="color" value={customColors.end} onChange={(e) => updateCustomColor('end', e.target.value)} />
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs">គែមឆ្វេង (Border)</span>
+                                                <input type="color" value={customColors.border} onChange={(e) => updateCustomColor('border', e.target.value)} />
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs">ចំណុចក្បាល (Dot)</span>
+                                                <input type="color" value={customColors.dot} onChange={(e) => updateCustomColor('dot', e.target.value)} />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} className="w-full bg-gray-700 border-none rounded p-2 text-white text-sm">
+                                        <option value="Kantumruy Pro">Kantumruy</option><option value="Moul">Moul</option><option value="Battambang">Battambang</option><option value="Dangrek">Dangrek</option>
+                                    </select>
+                                    
+                                    <div className="flex items-center gap-2 cursor-pointer p-2 bg-gray-700/30 rounded" onClick={() => setShowConnector(!showConnector)}>
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${showConnector ? 'bg-blue-500 border-blue-500' : 'border-gray-500'}`}>{showConnector && <div className="w-2 h-2 bg-white rounded-full"></div>}</div>
+                                        <span className="text-xs text-gray-300">ខ្សែភ្ជាប់ (Line)</span>
+                                    </div>
+                                </div>
+                                <hr className="border-gray-700" />
+
+                                {/* Scale/Reset/Gap */}
+                                <div className="space-y-3">
+                                    <label className="text-xs font-bold text-gray-400 flex items-center gap-2 uppercase"><Icon path={icons.move} size={14} /> ទំហំ & ទីតាំង</label>
+                                    
+                                    {/* Scale */}
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-xs text-gray-400"><span>ពង្រីក (Scale)</span><span>{Math.round(scale * 100)}%</span></div>
+                                        <input type="range" min="0.5" max="2.0" step="0.1" value={scale} onChange={(e) => setScale(parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                                    </div>
+
+                                    {/* Gap Spacing (NEW) */}
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-xs text-gray-400">
+                                            <span className="flex items-center gap-1"><Icon path={icons.sliders} size={10} /> គម្លាត (Spacing)</span>
+                                            <span>{gapSize}px</span>
+                                        </div>
+                                        <input type="range" min="0" max="100" step="5" value={gapSize} onChange={(e) => setGapSize(parseInt(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500" />
+                                    </div>
+
+                                    <button onClick={() => { setScale(1); setPosition({x: 50, y: 50}); setGapSize(20); }} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mt-2"><Icon path={icons.refresh} size={10} /> Reset Position</button>
+                                </div>
+
+                                <div className="pt-2 pb-6">
+                                    <button onClick={() => setShowControls(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-lg"><Icon path={icons.monitor} size={16} /> ពេញអេក្រង់ (OBS Mode)</button>
+                                    <p className="text-[10px] text-gray-400 text-center mt-2">Right Click in OBS -> Interact</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MAIN AREA */}
+                    <div className={`flex-1 relative flex items-center justify-center overflow-hidden cursor-crosshair ${backgroundMode === 'video' ? 'bg-black' : 'bg-transparent'}`} onDoubleClick={() => setShowControls(!showControls)}>
+                        
+                        {backgroundMode === 'video' && !videoSrc && (
+                            <div className="text-gray-600 flex flex-col items-center pointer-events-none select-none opacity-50">
+                                <Icon path={icons.upload} size={48} className="mb-2" />
+                                <p className="font-['Dangrek'] text-lg">សូមដាក់វីដេអូ</p>
+                            </div>
+                        )}
+
+                        {backgroundMode === 'video' && videoSrc && (
+                            <video ref={videoRef} src={videoSrc} className="w-full h-full object-contain pointer-events-none" loop onClick={togglePlay} />
+                        )}
+
+                        {/* DRAGGABLE LIST */}
+                        <div 
+                            className="absolute z-20 cursor-move transition-transform duration-75 ease-out select-none"
+                            style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, transformOrigin: 'top left', left: 0, top: 0 }}
+                            onMouseDown={handleMouseDown}
+                        >
+                            <div className="relative">
+                                {showConnector && lines.length > 1 && (
+                                    <div className="absolute left-[11px] top-6 bottom-6 w-1 bg-white/30 rounded-full z-0" style={{ background: `linear-gradient(to bottom, rgba(255,255,255,0.5), rgba(255,255,255,0.1))` }}></div>
+                                )}
+                                
+                                {/* Dynamic Gap applied here */}
+                                <div className="flex flex-col items-start" style={{ gap: `${gapSize}px` }}>
+                                    {lines.map((line, index) => {
+                                        const isCustom = themeColor === 'custom';
+                                        const presetStyle = !isCustom ? getStyle(index) : null;
+                                        
+                                        const animDelay = animationType === 'wave' ? `${index * 0.2}s` : '0s';
+                                        
+                                        // Inline styles for custom theme
+                                        const boxStyle = isCustom ? {
+                                            background: `linear-gradient(to right, ${customColors.start}, ${customColors.end})`,
+                                            borderLeft: showConnector ? 'none' : `8px solid ${customColors.border}`
+                                        } : {};
+                                        
+                                        const dotStyle = isCustom ? {
+                                            backgroundColor: customColors.dot
+                                        } : {};
+
+                                        return (
+                                            <div key={index} className={`group flex items-center relative z-10 ${getAnimationClass()}`} style={{ animationDelay: animDelay }}>
+                                                {showConnector && (
+                                                    <div className="relative flex items-center justify-center w-6 h-6 mr-3 shrink-0">
+                                                        {/* Dot Ring */}
+                                                        <div 
+                                                            className={`absolute w-full h-full rounded-full opacity-50 animate-pulse ${!isCustom ? presetStyle.dot.replace('bg-', 'bg-opacity-50 ') : ''}`}
+                                                            style={isCustom ? { backgroundColor: customColors.dot, opacity: 0.5 } : {}}
+                                                        ></div>
+                                                        {/* Solid Dot */}
+                                                        <div 
+                                                            className={`w-3 h-3 rounded-full shadow-lg ring-2 ring-white/20 ${!isCustom ? presetStyle.dot : ''}`}
+                                                            style={dotStyle}
+                                                        ></div>
+                                                        <div className="absolute left-3 w-4 h-0.5 bg-white/50"></div>
+                                                    </div>
+                                                )}
+                                                
+                                                <div 
+                                                    className={`
+                                                        relative pl-5 pr-8 py-3 rounded-r-2xl rounded-l-xl shadow-xl 
+                                                        text-white min-w-[200px] max-w-[800px] 
+                                                        ${!isCustom ? presetStyle.bg : ''} 
+                                                        ${!isCustom && !showConnector ? `border-l-8 ${presetStyle.border}` : ''}
+                                                        ${animationType === 'none' ? 'transform transition-all group-hover:scale-[1.02]' : ''}
+                                                    `}
+                                                    style={boxStyle}
+                                                >
+                                                    <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent rounded-r-2xl rounded-l-xl pointer-events-none"></div>
+                                                    <span className="relative z-10 text-xl md:text-2xl font-bold drop-shadow-md leading-relaxed block" style={{ fontFamily: fontFamily }}>{line}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Video Controls Overlay */}
+                        {backgroundMode === 'video' && videoSrc && (
+                            <div className="absolute bottom-6 right-6 flex gap-2 opacity-0 hover:opacity-100 transition-opacity bg-black/50 p-2 rounded-xl backdrop-blur-sm z-50">
+                                <button onClick={togglePlay} className="p-2 bg-white text-black rounded-lg hover:bg-gray-200">{isPlaying ? <Icon path={icons.pause} size={18}/> : <Icon path={icons.play} size={18}/>}</button>
+                                <button onClick={toggleMute} className="p-2 bg-white text-black rounded-lg hover:bg-gray-200">{isMuted ? <Icon path={icons.volumeX} size={18}/> : <Icon path={icons.volume2} size={18}/>}</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
